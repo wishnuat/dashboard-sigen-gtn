@@ -1,201 +1,165 @@
-import React, { useState } from 'react';
-import { useDashboardData } from './hooks/useDashboardData';
+import { useState, useEffect, useRef } from 'react';
 import VesselList from './components/VesselList';
 import EnergyFlowDiagram from './components/EnergyFlowDiagram';
 import RuntimeChart from './components/RuntimeChart';
 import VesselInfoPanel from './components/VesselInfoPanel';
 import StatusBadge from './components/StatusBadge';
-import { mapBatteryStatus } from './utils/mapper';
+import { useHierarchicalMenu, useVesselSearch } from './hooks/useDashboardData';
 
-/**
- * Error Boundary Component
- */
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:4000/ws';
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
+function App() {
+  const [activeTab, setActiveTab] = useState('system');
+  const [selectedVessel, setSelectedVessel] = useState(null);
+  const [vessels, setVessels] = useState([]);
+  const [realtimeData, setRealtimeData] = useState(null);
+  const [historicalData, setHistoricalData] = useState({});
+  const [countdown, setCountdown] = useState(5);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const wsRef = useRef(null);
 
-  componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-  }
+  // Connect to WebSocket
+  useEffect(() => {
+    const connectWS = () => {
+      wsRef.current = new WebSocket(WS_URL);
 
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-          <div className="max-w-md p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-            <h2 className="text-xl font-bold text-red-600 dark:text-red-400 mb-4">
-              Something went wrong
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {this.state.error?.message || 'An unexpected error occurred'}
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
-            >
-              Reload Page
-            </button>
-          </div>
-        </div>
-      );
-    }
+      wsRef.current.onopen = () => {
+        console.log('[WS] Connected');
+        setConnectionStatus('connected');
+      };
 
-    return this.props.children;
-  }
-}
+      wsRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.systems) {
+            setVessels(data.systems);
+            if (!selectedVessel && data.systems.length > 0) {
+              setSelectedVessel(data.systems[0]);
+            }
+          }
+          
+          if (data.realtime) {
+            setRealtimeData(data.realtime);
+          }
+          
+          if (data.countdown !== undefined) {
+            setCountdown(data.countdown);
+          }
 
-/**
- * Main Dashboard Component
- */
-function Dashboard() {
-  const {
-    vesselList,
-    selectedSystem,
-    energyFlow,
-    historicalData,
-    countdown,
-    generatorStatus,
-    lastUpdated,
-    error,
-    warning,
-    isConnected,
-    isConnecting,
-    selectSystem,
-    fetchHistoricalData,
-  } = useDashboardData();
+          if (data.generatorStatus) {
+            setRealtimeData(prev => ({
+              ...prev,
+              generatorStatus: data.generatorStatus
+            }));
+          }
+        } catch (e) {
+          console.error('[WS] Parse error:', e);
+        }
+      };
 
-  const [currentPeriod, setCurrentPeriod] = useState('7d');
-  const [darkMode, setDarkMode] = useState(false);
+      wsRef.current.onclose = () => {
+        console.log('[WS] Disconnected');
+        setConnectionStatus('disconnected');
+        setTimeout(connectWS, 3000);
+      };
 
-  const handlePeriodChange = (period) => {
-    setCurrentPeriod(period);
-    fetchHistoricalData(period);
+      wsRef.current.onerror = (error) => {
+        console.error('[WS] Error:', error);
+        setConnectionStatus('error');
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  const handleSelectVessel = (vessel) => {
+    setSelectedVessel(vessel);
   };
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
-  const batteryStatus = energyFlow ? mapBatteryStatus(energyFlow.batteryPower) : null;
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'dark' : ''}`}>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <div className="flex h-screen min-h-[750px] bg-[#0f1117] text-[#e0e6f0] font-sans overflow-hidden">
+      {/* Sidebar */}
+      <VesselList 
+        vessels={vessels}
+        selectedVessel={selectedVessel}
+        onSelectVessel={handleSelectVessel}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-y-auto bg-[#0f1117]">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Sigen Energy Dashboard
-                </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Hybrid Energy Management System
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <StatusBadge
-                  isConnected={isConnected}
-                  isConnecting={isConnecting}
-                  countdown={countdown}
-                  generatorStatus={generatorStatus}
-                  batteryStatus={batteryStatus}
-                  warning={warning}
-                />
-
+        <header className="px-5 py-3.5 border-b border-[#1e2535]">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-sm text-[#8a9abf] mb-2">
+                {selectedVessel?.systemName || 'Select a vessel'}
+              </h1>
+              <div className="flex gap-2">
                 <button
-                  onClick={toggleDarkMode}
-                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  aria-label="Toggle dark mode"
+                  onClick={() => setActiveTab('system')}
+                  className={`px-4.5 py-1.5 text-xs rounded-md transition-all ${
+                    activeTab === 'system'
+                      ? 'bg-[#2d5090] border border-[#4f9eff] text-[#4f9eff]'
+                      : 'bg-[#1e3060] border border-[#2d4a80] text-[#4f9eff] hover:bg-[#2a4080]'
+                  }`}
                 >
-                  {darkMode ? (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.92l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zM6.343 14.92l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414z" clipRule="evenodd"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
-                    </svg>
-                  )}
+                  System
+                </button>
+                <button
+                  onClick={() => setActiveTab('location')}
+                  className={`px-4.5 py-1.5 text-xs rounded-md transition-all ${
+                    activeTab === 'location'
+                      ? 'bg-[#2d5090] border border-[#4f9eff] text-[#4f9eff]'
+                      : 'bg-[#1e3060] border border-[#2d4a80] text-[#4f9eff] hover:bg-[#2a4080]'
+                  }`}
+                >
+                  Location
                 </button>
               </div>
             </div>
-
-            {/* Error display */}
-            {error && (
-              <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-              </div>
-            )}
+            
+            <StatusBadge 
+              connectionStatus={connectionStatus}
+              countdown={countdown}
+            />
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex h-[calc(100vh-80px)]">
-          {/* Sidebar - Vessel List */}
-          <aside className="w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-hidden">
-            <VesselList
-              vessels={vesselList}
-              selectedSystem={selectedSystem}
-              onSelect={selectSystem}
+        {/* Tab Content */}
+        {activeTab === 'system' ? (
+          <>
+            {/* Ship Section with Energy Flow */}
+            {selectedVessel && realtimeData ? (
+              <EnergyFlowDiagram 
+                vessel={selectedVessel}
+                realtimeData={realtimeData}
+                countdown={countdown}
+              />
+            ) : (
+              <div className="p-5 text-center text-[#6b7a99]">
+                {connectionStatus === 'connecting' ? 'Connecting...' : 'No data available'}
+              </div>
+            )}
+
+            {/* Runtime Charts */}
+            <RuntimeChart 
+              vessel={selectedVessel}
+              historicalData={historicalData}
             />
-          </aside>
-
-          {/* Main Content Area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-              {/* Top Row - Energy Flow and Info Panel */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Energy Flow Diagram */}
-                <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                  <EnergyFlowDiagram
-                    energyFlow={energyFlow}
-                    generatorStatus={generatorStatus}
-                  />
-                </div>
-
-                {/* Vessel Info Panel */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                  <VesselInfoPanel
-                    vessel={selectedSystem}
-                    lastUpdated={lastUpdated}
-                    countdown={countdown}
-                  />
-                </div>
-              </div>
-
-              {/* Bottom Row - Historical Chart */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                <RuntimeChart
-                  historicalData={historicalData}
-                  onPeriodChange={handlePeriodChange}
-                  currentPeriod={currentPeriod}
-                />
-              </div>
-            </div>
-          </div>
-        </main>
+          </>
+        ) : (
+          /* Location Tab */
+          <VesselInfoPanel vessel={selectedVessel} />
+        )}
       </div>
     </div>
-  );
-}
-
-/**
- * App Component with Error Boundary
- */
-function App() {
-  return (
-    <ErrorBoundary>
-      <Dashboard />
-    </ErrorBoundary>
   );
 }
 

@@ -1,154 +1,59 @@
-import React from 'react';
-
 /**
- * Vessel Info Panel Component
- * Displays detailed information about selected vessel
+ * Vessel Info Panel - Tab Location dengan informasi vessel dan peta
  */
-export function VesselInfoPanel({ vessel, lastUpdated, countdown }) {
+export default function VesselInfoPanel({ vessel }) {
   if (!vessel) {
     return (
-      <div className="p-6 text-center text-gray-500">
-        Select a vessel to view details
+      <div className="p-5">
+        <div className="text-center text-[#6b7a99]">Select a vessel to view location</div>
       </div>
     );
   }
 
-  const formatDate = (date) => {
-    if (!date) return 'Never';
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  const formatCountdown = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   return (
-    <div className="p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        Vessel Information
-      </h3>
-
-      <div className="space-y-4">
-        {/* Vessel Name and ID */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            Vessel Name
-          </label>
-          <p className="text-lg font-medium text-gray-900 dark:text-white">
-            {vessel.name}
-          </p>
-        </div>
-
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            System ID
-          </label>
-          <p className="text-sm font-mono text-gray-700 dark:text-gray-300">
-            {vessel.id}
-          </p>
-        </div>
-
-        {/* Location */}
-        {(vessel.latitude || vessel.longitude) && (
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              Location
-            </label>
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              {vessel.latitude?.toFixed(4)}, {vessel.longitude?.toFixed(4)}
-            </p>
+    <div className="p-5">
+      {/* Vessel Info Card */}
+      <div className="bg-[#131a28] border border-[#1e2a3a] rounded-lg p-3 mb-3">
+        <div className="text-xs text-[#6b7a99] font-medium uppercase mb-2">Vessel Information</div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">Vessel Name</div>
+            <div className="text-xs text-[#c8d8f0] font-medium">{vessel.systemName || 'N/A'}</div>
           </div>
-        )}
-
-        {/* Status */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            Status
-          </label>
-          <div className="mt-1">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              vessel.status === 'online' 
-                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                : vessel.status === 'maintenance'
-                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-            }`}>
-              {vessel.status}
-            </span>
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">Vessel ID</div>
+            <div className="text-xs text-[#c8d8f0] font-medium font-mono">{vessel.systemId || 'N/A'}</div>
+          </div>
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">Current Status</div>
+            <div className="text-xs text-[#3dd68c] font-medium">Active</div>
+          </div>
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">Address</div>
+            <div className="text-xs text-[#c8d8f0] font-medium">{vessel.addr || 'Unknown'}</div>
+          </div>
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">PV Capacity</div>
+            <div className="text-xs text-[#c8d8f0] font-medium">{(vessel.pvCapacity || 0).toFixed(1)} kWp</div>
+          </div>
+          <div className="bg-[#0f1117] rounded-md p-2">
+            <div className="text-[9px] text-[#4f6080] mb-0.5">Battery Capacity</div>
+            <div className="text-xs text-[#c8d8f0] font-medium">{(vessel.batteryCapacity || 0).toFixed(2)} kWh</div>
           </div>
         </div>
+      </div>
 
-        {/* Capacities */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">
-              PV Capacity
-            </label>
-            <p className="text-sm font-medium text-gray-900 dark:text-white">
-              {vessel.pvCapacityFormatted || `${(vessel.pvCapacity / 1000).toFixed(1)} kW`}
-            </p>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">
-              Battery Capacity
-            </label>
-            <p className="text-sm font-medium text-gray-900 dark:text-white">
-              {vessel.batteryCapacityFormatted || `${(vessel.batteryCapacity / 1000).toFixed(1)} kWh`}
-            </p>
-          </div>
-        </div>
-
-        {/* Last Updated */}
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-          <label className="text-xs text-gray-500 dark:text-gray-400">
-            Last Updated
-          </label>
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            {formatDate(lastUpdated)}
-          </p>
-        </div>
-
-        {/* Countdown */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400">
-            Next API Refresh
-          </label>
-          <div className="flex items-center gap-2 mt-1">
-            <div className={`text-sm font-mono ${
-              countdown < 60 
-                ? 'text-red-600 dark:text-red-400' 
-                : 'text-gray-700 dark:text-gray-300'
-            }`}>
-              {formatCountdown(countdown)}
-            </div>
-            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div 
-                className={`h-2 rounded-full transition-all duration-1000 ${
-                  countdown < 60 
-                    ? 'bg-red-500' 
-                    : countdown < 180
-                    ? 'bg-yellow-500'
-                    : 'bg-green-500'
-                }`}
-                style={{ width: `${(countdown / 300) * 100}%` }}
-              />
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Backend fetches from Sigen API every 5 minutes
-          </p>
+      {/* Map Placeholder */}
+      <div className="w-full h-[500px] bg-[#131a28] border border-[#1e2a3a] rounded-lg overflow-hidden flex items-center justify-center">
+        <div className="text-center text-[#4f6080]">
+          <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <div className="text-sm">Map integration requires Google Maps API key</div>
+          <div className="text-xs mt-1">Location: {vessel.addr || 'Unknown'}</div>
         </div>
       </div>
     </div>
   );
 }
-
-export default VesselInfoPanel;

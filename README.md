@@ -1,230 +1,107 @@
-# Sigen Energy Dashboard - Full Stack Project
+# Sigen Energy Dashboard - Hybrid Energy Management System
 
-Dashboard manajemen energi hybrid dengan backend proxy aman ke Sigen OpenAPI dan frontend React real-time.
-
-## 🏗️ Arsitektur
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Frontend      │────▶│    Backend       │────▶│  Sigen Cloud    │
-│   React + Vite  │ WS  │  Node.js + Express│ HTTP│  API (Rate Ltd) │
-│   Refresh 5s    │◀────│  Cache 5m + WS   │     │  1 req / 5 min  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
+Dashboard full-stack untuk manajemen energi hybrid dengan integrasi Sigen Cloud API.
 
 ## 📁 Struktur Folder
 
 ```
 /workspace
-├── backend/
-│   ├── auth/
-│   │   └── sigenAuth.js      # OAuth2 authentication
-│   ├── proxy/
-│   │   └── sigenApi.js       # API wrapper dengan rate limiting
-│   ├── cache/
-│   │   └── dataStore.js      # Cache & generator state
-│   ├── ws/
-│   │   └── broadcaster.js    # WebSocket broadcasting
-│   ├── server.js             # Main Express server
-│   ├── package.json
-│   └── .env.example
+├── backend/                    # Node.js + Express + WebSocket
+│   ├── auth/sigenAuth.js       # OAuth2 authentication
+│   ├── proxy/sigenApi.js       # Sigen API wrapper
+│   ├── cache/dataStore.js      # Data caching
+│   ├── ws/broadcaster.js       # WebSocket broadcaster
+│   ├── server.js               # Main server
+│   └── .env                    # Environment variables
 │
-└── frontend/
+└── frontend/                   # React + Vite + TailwindCSS
     ├── src/
-    │   ├── hooks/
-    │   │   └── useDashboardData.js  # WebSocket hook
-    │   ├── components/
-    │   │   ├── VesselList.jsx
-    │   │   ├── EnergyFlowDiagram.jsx
-    │   │   ├── RuntimeChart.jsx
-    │   │   ├── VesselInfoPanel.jsx
-    │   │   └── StatusBadge.jsx
-    │   ├── utils/
-    │   │   └── mapper.js       # Data transformation
-    │   ├── App.jsx
-    │   ├── main.jsx
-    │   └── index.css
-    ├── package.json
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── .env.example
+    │   ├── components/         # UI components
+    │   ├── hooks/              # Custom React hooks
+    │   ├── utils/mapper.js     # Data transformation
+    │   └── App.jsx             # Main app
+    └── .env.local              # Environment variables
 ```
 
 ## 🚀 Cara Menjalankan
 
-### 1. Setup Backend
-
+### Backend (Terminal 1)
 ```bash
 cd /workspace/backend
-
-# Install dependencies
 npm install
-
-# Copy environment file dan edit dengan kredensial Anda
 cp .env.example .env
-# Edit .env dengan SIGEN_USERNAME dan SIGEN_PASSWORD Anda
-
-# Jalankan server
+# Edit .env dengan credentials Anda
 npm run dev
 ```
 
-Server akan berjalan di `http://localhost:4000`
-
-### 2. Setup Frontend
-
+### Frontend (Terminal 2)
 ```bash
 cd /workspace/frontend
-
-# Install dependencies
 npm install
-
-# Copy environment file (opsional, sudah ada default)
-cp .env.example .env.local
-
-# Jalankan development server
 npm run dev
 ```
 
-Frontend akan berjalan di `http://localhost:3000`
+## 🔑 Konfigurasi Credentials
 
-## 🔑 Konfigurasi Environment
-
-### Backend (.env)
+Edit file `backend/.env`:
 ```env
 SIGEN_USERNAME=BBS@gatrianusantara.com
 SIGEN_PASSWORD=your_password_here
 PORT=4000
-NODE_ENV=development
 ```
 
-**Catatan:** API menggunakan endpoint username/password login:
-- **URL**: `POST https://api-apac.sigencloud.com/openapi/auth/login/password`
-- **Body**: `{ "username": "...", "password": "..." }`
-- **Response**: `{ "accessToken": "..." }`
+## 🎨 Fitur
 
-Untuk data retrieval:
-- **URL**: `GET https://api-apac.sigencloud.com/openapi/system`
-- **Headers**: `Authorization: Bearer <accessToken>`
+- **Real-time Monitoring**: Update setiap 5 detik via WebSocket
+- **Energy Flow Diagram**: Visualisasi aliran energi PV → Battery/Load/Grid
+- **Hierarchical Vessel List**: Sidebar dengan struktur perusahaan → kapal
+- **Runtime Charts**: Battery dan Generator runtime (7D/14D/30D)
+- **Rate Limit Handling**: Antre otomatis 5 menit jika kena limit API
+- **Dark Theme**: Tampilan modern sesuai mockup
 
-### Frontend (.env.local)
-```env
-VITE_WS_URL=ws://localhost:4000/ws
-VITE_API_URL=http://localhost:4000/api
-```
+## 📊 API Endpoints
 
-## 🧪 Testing Tanpa AppKey Asli
+Backend bertindak sebagai proxy aman ke Sigen API:
 
-Backend menyediakan **mock data fallback** otomatis jika:
-1. `SIGEN_USERNAME` tidak dikonfigurasi
-2. Request ke Sigen API gagal
+- `GET /api/systems` - List semua vessel
+- `GET /api/system/:id/realtime` - Realtime energy flow
+- `GET /api/system/:id/history?period=7d` - Historical data
+- `WebSocket /ws` - Real-time push setiap 5 detik
 
-Mock data akan menghasilkan:
-- 3 vessel dummy (Alpha, Beta, Gamma)
-- Realtime energy flow random yang berubah setiap 5 detik
-- Historical data chart dengan data random
+## ⚠️ Rate Limiting
 
-**Tidak perlu credentials untuk testing!** Cukup jalankan tanpa set `SIGEN_USERNAME`.
+Sigen API membatasi 1 request per 5 menit. Backend menangani dengan:
+1. Cache response selama 300 detik
+2. Broadcast data cache ke frontend setiap 5 detik
+3. Jika kena error 1201 (Access Restriction), tunggu 5 menit sebelum retry
+4. Tidak ada mock data - hanya data real dari API
 
-## 📊 Fitur Utama
+## 🧪 Testing Tanpa Credentials
 
-### Backend
-- ✅ OAuth2 token management dengan auto-refresh
-- ✅ Rate limit handling (error 1110) dengan exponential backoff
-- ✅ Response caching dengan TTL 300 detik
-- ✅ WebSocket broadcasting setiap 5 detik
-- ✅ Generator runtime inference (gridPower < -2kW & batterySoc < 20%)
-- ✅ Graceful degradation dengan stale cache
-
-### Frontend
-- ✅ Real-time dashboard dengan WebSocket
-- ✅ Energy flow diagram visual
-- ✅ Historical chart (7D/14D/30D)
-- ✅ Dark/Light mode toggle
-- ✅ Auto-reconnect WebSocket
-- ✅ Mock data fallback
-- ✅ Error boundary
-- ✅ Responsive design
-
-## 🔌 API Endpoints
-
-| Endpoint | Method | Deskripsi |
-|----------|--------|-----------|
-| `/api/systems` | GET | List semua vessel/system |
-| `/api/system/:id/realtime` | GET | Realtime energy flow |
-| `/api/system/:id/history` | GET | Historical data (query: period=7d\|14d\|30d) |
-| `/api/cache/stats` | GET | Cache statistics (debugging) |
-| `/health` | GET | Health check endpoint |
-| `/ws` | WebSocket | Real-time data stream |
-
-## 🎨 Komponen UI
-
-1. **VesselList** - Sidebar dengan list vessel dan status
-2. **EnergyFlowDiagram** - Diagram aliran energi PV→Battery/Grid/Load
-3. **RuntimeChart** - Line chart historis dengan Recharts
-4. **VesselInfoPanel** - Detail vessel terpilih
-5. **StatusBadge** - Status monitoring, countdown, generator/battery indicator
-
-## ⚙️ Business Logic
-
-### Generator Inference
-Generator dianggap ON ketika:
-- `gridPower < -2000W` (import dari grid/generator)
-- `batterySoc < 20%` (baterai rendah)
-
-Runtime diakumulasi di backend dan ditampilkan dalam jam.
-
-### Rate Limiting
-- Backend fetch ke Sigen: **maksimal 1x per 5 menit**
-- Frontend refresh UI: **setiap 5 detik** via WebSocket
-- Countdown di UI menunjukkan waktu hingga fetch berikutnya
-
-### Historical Data
-- **7D**: Level = Day, 7 hari terakhir
-- **14D**: Level = Day, 14 hari terakhir  
-- **30D**: Level = Day, 30 hari terakhir
+Jika credentials tidak dikonfigurasi atau gagal login:
+- Backend akan menampilkan error rate limit
+- Frontend akan menunjukkan status "CONNECTION ERROR"
+- Tidak ada data palsu yang ditampilkan
 
 ## 🛠️ Tech Stack
 
 **Backend:**
-- Node.js 18+
-- Express.js
+- Node.js + Express
 - WebSocket (ws)
 - node-cache
-- Axios
-- dotenv
+- axios
 
 **Frontend:**
-- React 18
-- Vite
+- React 18 + Vite
 - TailwindCSS
 - Recharts
-- Axios
+- WebSocket client
 
-## 📝 Catatan Penting
+## 📝 Mockup Reference
 
-1. **Authentication**: Menggunakan username/password login (bukan OAuth2 client credentials)
-2. **Rate Limit**: API Sigen membatasi 1 request per 5 menit per akun/stasiun
-3. **Token Expiry**: Access token di-refresh otomatis sebelum expired (default 12 jam)
-4. **Generator Runtime**: Diinferensi dari gridPower dan batterySoc, bukan dari API langsung
-5. **Mock Data**: Aktif otomatis jika tidak ada credentials atau API error
-
-## 🔧 Troubleshooting
-
-### Backend tidak bisa connect ke Sigen
-- Pastikan `SIGEN_USERNAME` dan `SIGEN_PASSWORD` benar
-- Cek koneksi internet
-- Lihat log untuk error detail
-
-### Frontend tidak connect ke WebSocket
-- Pastikan backend running di port 4000
-- Cek console browser untuk error WebSocket
-- Verify `VITE_WS_URL` di .env.local
-
-### Data tidak update
-- Cek countdown di StatusBadge
-- Lihat log backend untuk "Fetching fresh data"
-- Verify cache tidak stale terlalu lama
-
-## 📄 License
-
-MIT License
+Frontend dibuat sesuai mockup HTML dengan:
+- Dark theme (#0f1117 background)
+- Hierarchical sidebar menu
+- SVG ship diagram dengan animasi aliran energi
+- Runtime charts dengan Recharts
+- Status badges dan countdown timer
