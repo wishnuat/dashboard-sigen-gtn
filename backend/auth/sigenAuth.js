@@ -1,71 +1,102 @@
 import axios from 'axios';
-import NodeCache from 'node-cache';
+import dotenv from 'dotenv';
 
-const TOKEN_CACHE_KEY = 'sigen_access_token';
-const tokenCache = new NodeCache({ stdTTL: 42000 }); // 42000 seconds (slightly less than 12 hours)
+dotenv.config();
+
+const SIGEN_BASE_URL = 'https://api-apac.sigencloud.com/openapi';
+const USERNAME = process.env.SIGEN_USERNAME;
+const PASSWORD = process.env.SIGEN_PASSWORD;
+
+let accessToken = null;
+let tokenExpiresAt = 0;
+let lockUntil = 0; // Timestamp kapan boleh request lagi jika kena ban
 
 /**
- * Get access token from Sigen API using username/password
- * POST https://api-apac.sigencloud.com/openapi/auth/login/password
- * @returns {Promise<string>} Access token
+ * Get Access Token with Rate Limit Handling
+ * Jika kena error 1201, kunci akses selama 5 menit
  */
 export async function getAccessToken() {
-  const cachedToken = tokenCache.get(TOKEN_CACHE_KEY);
-  if (cachedToken) {
-    console.log('[Auth] Using cached token');
-    return cachedToken;
+  const now = Date.now();
+
+  // 1. Cek apakah sedang dalam masa hukuman (lockout)
+  if (now < lockUntil) {
+    const waitSeconds = Math.ceil((lockUntil - now) / 1000);
+    throw new Error(`RATE_LIMIT_LOCKED: Wait ${waitSeconds}s`);
   }
 
-  const username = process.env.SIGEN_USERNAME;
-  const password = process.env.SIGEN_PASSWORD;
-
-  if (!username || !password) {
-    console.warn('[Auth] SIGEN_USERNAME or SIGEN_PASSWORD not configured, using mock mode');
-    // Mock token for development/testing
-    const mockToken = `mock_token_${Date.now()}`;
-    tokenCache.set(TOKEN_CACHE_KEY, mockToken, 3600);
-    return mockToken;
+  // 2. Cek apakah token masih valid (ambil buffer 1 menit)
+  if (accessToken && now < tokenExpiresAt - 60000) {
+    return accessToken;
   }
+
+  console.log('[Auth] Requesting new token...');
 
   try {
     const response = await axios.post(
-      'https://api-apac.sigencloud.com/openapi/auth/login/password',
-      { 
-        username: username,
-        password: password
+      `${SIGEN_BASE_URL}/auth/login/password`,
+      {
+        username: USERNAME,
+        password: PASSWORD,
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 
-    const data = response.data;
-    // Handle response structure - adjust based on actual API response
-    const accessToken = data.accessToken || data.data?.accessToken || data.token;
-    const expiresIn = data.expiresIn || data.data?.expiresIn || data.expires_in || 43200; // Default 12 hours
-    
-    if (!accessToken) {
+    const { code, msg, data } = response.data;
+
+    if (code !== 0) {
+      if (code === 1201) {
+        // Kena rate limit saat login, kunci 5 menit
+        lockUntil = Date.now() + 300000; 
+        throw new Error(`Login failed: Access restriction (${msg}). Locked for 5m.`);
+      }
+      throw new Error(`Login failed: ${msg} (code: ${code})`);
+    }
+
+    // Handle double-encoded JSON string jika ada
+    let parsedData = data;
+    if (typeof data === 'string') {
+      try {
+        parsedData = JSON.parse(data);
+      } catch (e) {
+        console.error('[Auth] Failed to parse nested JSON', e);
+      }
+    }
+
+    if (!parsedData || !parsedData.accessToken) {
       throw new Error('No access token in response');
     }
-    
-    // Cache token with TTL slightly less than expires_in
-    const cacheTTL = Math.max(expiresIn - 300, 3600); // At least 1 hour
-    tokenCache.set(TOKEN_CACHE_KEY, accessToken, cacheTTL);
-    
-    console.log('[Auth] New token acquired, expires in', expiresIn, 'seconds');
+
+    accessToken = parsedData.accessToken;
+    const expiresIn = parsedData.expiresIn || 43200; // Default 12 jam
+    tokenExpiresAt = Date.now() + expiresIn * 1000;
+
+    console.log('[Auth] Token acquired successfully');
     return accessToken;
+
   } catch (error) {
-    console.error('[Auth] Token request failed:', error.response?.data || error.message);
+    if (error.message.includes('RATE_LIMIT_LOCKED')) {
+      throw error; // Lempar ulang agar server tahu ini masalah timing
+    }
+    
+    // Jika error network atau 1201, set lock
+    if (error.response?.data?.code === 1201 || error.code === 'ECONNABORTED') {
+      lockUntil = Date.now() + 300000;
+      console.error('[Auth] Rate limit detected. Locking for 5 minutes.');
+    }
+    
     throw error;
   }
 }
 
-/**
- * Clear token cache (useful for testing)
- */
-export function clearTokenCache() {
-  tokenCache.del(TOKEN_CACHE_KEY);
-  console.log('[Auth] Token cache cleared');
+export function getLockStatus() {
+  const now = Date.now();
+  if (now < lockUntil) {
+    return {
+      isLocked: true,
+      remainingSeconds: Math.ceil((lockUntil - now) / 1000)
+    };
+  }
+  return { isLocked: false, remainingSeconds: 0 };
 }

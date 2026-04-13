@@ -2,49 +2,50 @@ import axios from 'axios';
 import { getAccessToken } from '../auth/sigenAuth.js';
 import NodeCache from 'node-cache';
 
-const API_BASE_URL = 'https://api-apac.sigencloud.com';
-const dataCache = new NodeCache({ stdTTL: 300 }); // 300 seconds TTL
+const API_BASE_URL = 'https://api-apac.sigencloud.com/openapi';
+const dataCache = new NodeCache({ stdTTL: 300 }); // 5 menit
 
 /**
- * Retry with exponential backoff
- * @param {Function} fn - Function to retry
- * @param {number} maxRetries - Maximum retry attempts
- * @returns {Promise<any>}
+ * Helper untuk parsing respons API Sigen yang berbentuk Array
+ * Format: [{ code: 0, msg: "success", data: "..." }]
  */
-async function retryWithBackoff(fn, maxRetries = 3) {
-  let lastError;
+function parseSigenResponse(response) {
+  const rawData = response.data;
   
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  // 1. Pastikan respons adalah Array
+  if (!Array.isArray(rawData) || rawData.length === 0) {
+    console.error('[API] Unexpected response format: expected non-empty array', rawData);
+    throw new Error('Unexpected response format: expected array');
+  }
+
+  const item = rawData[0];
+  const { code, msg, data } = item;
+
+  // 2. Cek error code
+  if (code !== 0) {
+    if (code === 1201) {
+      throw new Error(`Sigen Rate Limit (1201): ${msg}`);
+    }
+    throw new Error(`Sigen API Error: ${msg} (code: ${code})`);
+  }
+
+  // 3. Parse data jika berupa string JSON (double encoded)
+  let parsedData = data;
+  if (typeof data === 'string') {
     try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      
-      // Handle rate limit error (1110)
-      if (error.response?.data?.code === 1110) {
-        console.log(`[API] Rate limited, attempt ${attempt}/${maxRetries}`);
-        
-        if (attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt), 30000); // Max 30s
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-      }
-      
-      throw error;
+      parsedData = JSON.parse(data);
+    } catch (e) {
+      console.error('[API] Failed to parse nested JSON string', e);
+      // Jika gagal parse, kembalikan string asli (fallback)
+      parsedData = data; 
     }
   }
-  
-  throw lastError;
+
+  return parsedData;
 }
 
 /**
- * Make authenticated request to Sigen API
- * @param {string} endpoint - API endpoint
- * @param {object} params - Query parameters
- * @param {string} method - HTTP method
- * @param {object} data - Request body
- * @returns {Promise<any>}
+ * Make authenticated request
  */
 export async function sigenRequest(endpoint, params = {}, method = 'GET', data = null) {
   const token = await getAccessToken();
@@ -61,86 +62,115 @@ export async function sigenRequest(endpoint, params = {}, method = 'GET', data =
     data: method !== 'GET' ? data : undefined,
   };
 
-  return retryWithBackoff(async () => {
+  try {
     const response = await axios(config);
-    
-    // Handle different response structures
-    const responseData = response.data;
-    
-    // Check for error codes in various formats
-    if (responseData.code && responseData.code !== 0 && responseData.code !== 200) {
-      throw new Error(`Sigen API Error: ${responseData.msg || responseData.message} (code: ${responseData.code})`);
+    return parseSigenResponse(response);
+  } catch (error) {
+    if (error.response) {
+      // Coba parse error juga jika bentuknya sama
+      const raw = error.response.data;
+      if (Array.isArray(raw) && raw[0]?.code === 1201) {
+        throw new Error(`Sigen Rate Limit: ${raw[0].msg}`);
+      }
     }
-    
-    return responseData;
-  });
+    throw error;
+  }
 }
 
 /**
- * Get system list (vessels)
- * GET /openapi/system
- * @param {number} page - Page number
- * @param {number} pageSize - Items per page
- * @returns {Promise<any>}
+ * Get System List
+ * Endpoint: GET /openapi/system
  */
 export async function getSystemList(page = 1, pageSize = 100) {
-  const cacheKey = `systems:${page}:${pageSize}`;
+  const cacheKey = 'systems:list';
   const cached = dataCache.get(cacheKey);
-  
-  if (cached) {
-    console.log('[API] Returning cached system list');
-    return cached;
-  }
+  if (cached) return cached;
 
-  try {
-    // Using the endpoint structure you provided: GET /openapi/system
-    const result = await sigenRequest('/openapi/system', { page, pageSize });
-    dataCache.set(cacheKey, result);
-    return result;
-  } catch (error) {
-    console.error('[API] Failed to fetch system list:', error.message);
-    // Return cached data on error if available
-    const fallback = dataCache.get(cacheKey);
-    if (fallback) {
-      console.log('[API] Returning stale cache due to error');
-      return fallback;
-    }
-    throw error;
-  }
+  // Sesuai contoh: GET /openapi/system (tanpa parameter page query di contoh, tapi bisa ditambahkan jika perlu)
+  // Contoh Anda tidak menunjukkan parameter page pada URL, jadi kita panggil langsung
+  const result = await sigenRequest('/system');
+  
+  // Result dari parseSigenResponse untuk endpoint ini adalah Array of Objects
+  // Contoh: [{systemId:...}, {systemId:...}]
+  dataCache.set(cacheKey, result);
+  return result;
 }
 
 /**
- * Get realtime energy flow data
- * @param {string} systemId - System ID
- * @returns {Promise<any>}
+ * Get Devices for a System
+ * Endpoint: GET /openapi/system/{systemId}/devices
+ */
+export async function getSystemDevices(systemId) {
+  const cacheKey = `devices:${systemId}`;
+  const cached = dataCache.get(cacheKey);
+  if (cached) return cached;
+
+  const result = await sigenRequest(`/system/${systemId}/devices`);
+  // Result adalah Array of Strings (JSON strings) yang sudah di-parse menjadi Array of Objects
+  dataCache.set(cacheKey, result);
+  return result;
+}
+
+/**
+ * Get Realtime Info
+ * Endpoint: GET /openapi/systems/{systemId}/devices/{serialNumber}/realtimeInfo
+ * Note: Perlu loop untuk semua device atau ambil inverter saja
+ */
+export async function getDeviceRealtimeInfo(systemId, serialNumber) {
+  const result = await sigenRequest(`/systems/${systemId}/devices/${serialNumber}/realtimeInfo`);
+  // Result adalah Array of Objects (karena setiap item di array respons di-parse)
+  return result;
+}
+
+/**
+ * Get Aggregated Realtime Flow (Custom Logic)
+ * Mengambil devices -> cari Inverter -> ambil realtimeInfo
  */
 export async function getRealtimeEnergyFlow(systemId) {
-  const cacheKey = `realtime:${systemId}`;
+  const cacheKey = `flow:${systemId}`;
   const cached = dataCache.get(cacheKey);
-  
-  if (cached) {
-    console.log('[API] Returning cached realtime data');
-    return cached;
-  }
+  if (cached) return cached;
 
   try {
-    // Adjust endpoint based on actual API - common patterns
-    const result = await sigenRequest('/openapi/system/realtime', { systemId });
-    dataCache.set(cacheKey, result);
-    return result;
-  } catch (error) {
-    console.error('[API] Failed to fetch realtime data:', error.message);
-    const fallback = dataCache.get(cacheKey);
-    if (fallback) {
-      console.log('[API] Returning stale cache due to error');
-      return fallback;
+    // 1. Ambil daftar device
+    const devices = await getSystemDevices(systemId);
+    
+    // 2. Cari Inverter (biasanya sumber data utama untuk power flow)
+    const inverter = devices.find(d => d.deviceType === 'Inverter');
+    
+    if (!inverter) {
+      throw new Error('No Inverter found for system ' + systemId);
     }
+
+    // 3. Ambil realtime info inverter
+    // Endpoint: /openapi/systems/{id}/devices/{serial}/realtimeInfo
+    // Respons: Array [{ code:0, data: "{...}" }] -> parse jadi Object realtimeInfo
+    const realtimeRaw = await sigenRequest(`/systems/${systemId}/devices/${inverter.serialNumber}/realtimeInfo`);
+    
+    // realtimeRaw adalah array hasil parse, ambil yang pertama (inverter)
+    const inverterData = realtimeRaw[0]; 
+    
+    // Gabungkan dengan info battery jika ada
+    const batteries = devices.filter(d => d.deviceType === 'Battery');
+    
+    const flowData = {
+      systemId,
+      inverter: inverterData, // Berisi realTimeInfo: { activePower, batSoc, batPower, ... }
+      batteries: batteries,
+      timestamp: Date.now()
+    };
+
+    dataCache.set(cacheKey, flowData);
+    return flowData;
+
+  } catch (error) {
+    console.error('[API] Error fetching realtime flow:', error.message);
     throw error;
   }
 }
 
 /**
- * Get historical data
+ * Get historical data V1
  * @param {string} systemId - System ID
  * @param {string} level - Data level: Hour, Day, Week, Month
  * @param {string} startDate - Start date (YYYY-MM-DD)
@@ -157,13 +187,14 @@ export async function getHistoricalData(systemId, level, startDate, endDate) {
   }
 
   try {
-    // Adjust endpoint based on actual API
-    const result = await sigenRequest('/openapi/system/history', {
+    // Endpoint sesuai dokumentasi Sigen OpenAPI
+    const result = await sigenRequest('/system/history/data', {
       systemId,
       level,
       startDate,
       endDate,
     });
+    
     dataCache.set(cacheKey, result);
     return result;
   } catch (error) {
@@ -178,7 +209,7 @@ export async function getHistoricalData(systemId, level, startDate, endDate) {
 }
 
 /**
- * Get cached data or null
+ * Get cached data by key
  * @param {string} key - Cache key
  * @returns {any|null}
  */
@@ -186,20 +217,6 @@ export function getCachedData(key) {
   return dataCache.get(key) || null;
 }
 
-/**
- * Set data in cache
- * @param {string} key - Cache key
- * @param {any} value - Value to cache
- * @param {number} ttl - Time to live in seconds
- */
-export function setCachedData(key, value, ttl = 300) {
-  dataCache.set(key, value, ttl);
-}
-
-/**
- * Clear all data cache
- */
 export function clearDataCache() {
   dataCache.flushAll();
-  console.log('[API] Data cache cleared');
 }
