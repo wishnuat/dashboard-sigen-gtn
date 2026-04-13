@@ -17,7 +17,7 @@ export class DataBroadcaster {
    * @param {import('http').Server} httpServer - HTTP server to attach to
    */
   init(httpServer) {
-    this.wss = new WebSocket.Server({ 
+    this.wss = new WebSocket.WebSocketServer({ 
       server: httpServer,
       path: '/ws'
     });

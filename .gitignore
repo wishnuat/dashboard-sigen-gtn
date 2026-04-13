@@ -1,41 +1,18 @@
 ```
 # Dependencies
-backend/node_modules/
-frontend/node_modules/
-
-# Build artifacts
-backend/dist/
-frontend/dist/
+node_modules/
 
 # Environment variables
-backend/.env
-backend/.env.*
-frontend/.env
-frontend/.env.*
+.env
+.env.local
+.env.*
 
 # Logs
 *.log
 
-# OS generated files
-.DS_Store
-Thumbs.db
-
 # IDE files
 .vscode/
 .idea/
-
-# Temporary files
-*.tmp
-*.swp
-
-# Package lock files
-backend/package-lock.json
-frontend/package-lock.json
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
 
 # Python cache
 __pycache__/
@@ -43,17 +20,32 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Distribution / packaging
-.Python
-env/
-venv/
-.venv/
+# Build outputs
+dist/
+build/
+target/
 
-# Testing
-.pytest_cache/
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# MyPy cache
 .mypy_cache/
 
-# Compiled CSS and JS in frontend dist
-frontend/dist/assets/
+# Pytest cache
+.pytest_cache/
 
+# Virtual environments
+.venv/
+venv/
 ```

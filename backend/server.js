@@ -86,7 +86,7 @@ app.get('/api/systems', async (req, res) => {
     }
     
     // Return mock data for testing without credentials
-    if (process.env.NODE_ENV === 'development' && !process.env.SIGEN_APP_KEY) {
+    if (process.env.NODE_ENV === 'development' && !process.env.SIGEN_USERNAME) {
       return res.json({
         success: true,
         data: [
