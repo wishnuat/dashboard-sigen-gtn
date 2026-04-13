@@ -64,16 +64,21 @@ export async function sigenRequest(endpoint, params = {}, method = 'GET', data =
   return retryWithBackoff(async () => {
     const response = await axios(config);
     
-    if (response.data.code !== 0) {
-      throw new Error(`Sigen API Error: ${response.data.msg} (code: ${response.data.code})`);
+    // Handle different response structures
+    const responseData = response.data;
+    
+    // Check for error codes in various formats
+    if (responseData.code && responseData.code !== 0 && responseData.code !== 200) {
+      throw new Error(`Sigen API Error: ${responseData.msg || responseData.message} (code: ${responseData.code})`);
     }
     
-    return response.data;
+    return responseData;
   });
 }
 
 /**
  * Get system list (vessels)
+ * GET /openapi/system
  * @param {number} page - Page number
  * @param {number} pageSize - Items per page
  * @returns {Promise<any>}
@@ -88,7 +93,8 @@ export async function getSystemList(page = 1, pageSize = 100) {
   }
 
   try {
-    const result = await sigenRequest('/v1/system/list/page/query', { page, pageSize });
+    // Using the endpoint structure you provided: GET /openapi/system
+    const result = await sigenRequest('/openapi/system', { page, pageSize });
     dataCache.set(cacheKey, result);
     return result;
   } catch (error) {
@@ -118,7 +124,8 @@ export async function getRealtimeEnergyFlow(systemId) {
   }
 
   try {
-    const result = await sigenRequest('/v1/system/energy/flow', { systemId });
+    // Adjust endpoint based on actual API - common patterns
+    const result = await sigenRequest('/openapi/system/realtime', { systemId });
     dataCache.set(cacheKey, result);
     return result;
   } catch (error) {
@@ -133,7 +140,7 @@ export async function getRealtimeEnergyFlow(systemId) {
 }
 
 /**
- * Get historical data V1
+ * Get historical data
  * @param {string} systemId - System ID
  * @param {string} level - Data level: Hour, Day, Week, Month
  * @param {string} startDate - Start date (YYYY-MM-DD)
@@ -150,7 +157,8 @@ export async function getHistoricalData(systemId, level, startDate, endDate) {
   }
 
   try {
-    const result = await sigenRequest('/v1/system/history/data', {
+    // Adjust endpoint based on actual API
+    const result = await sigenRequest('/openapi/system/history', {
       systemId,
       level,
       startDate,

@@ -1,11 +1,12 @@
 import axios from 'axios';
 import NodeCache from 'node-cache';
 
-const TOKEN_CACHE_KEY = 'sigen_oauth_token';
+const TOKEN_CACHE_KEY = 'sigen_access_token';
 const tokenCache = new NodeCache({ stdTTL: 42000 }); // 42000 seconds (slightly less than 12 hours)
 
 /**
- * Get OAuth2 token from Sigen API
+ * Get access token from Sigen API using username/password
+ * POST https://api-apac.sigencloud.com/openapi/auth/login/password
  * @returns {Promise<string>} Access token
  */
 export async function getAccessToken() {
@@ -15,20 +16,24 @@ export async function getAccessToken() {
     return cachedToken;
   }
 
-  const appKey = process.env.SIGEN_APP_KEY;
-  const appSecret = process.env.SIGEN_APP_SECRET;
+  const username = process.env.SIGEN_USERNAME;
+  const password = process.env.SIGEN_PASSWORD;
 
-  if (!appKey || !appSecret) {
-    throw new Error('SIGEN_APP_KEY or SIGEN_APP_SECRET not configured');
+  if (!username || !password) {
+    console.warn('[Auth] SIGEN_USERNAME or SIGEN_PASSWORD not configured, using mock mode');
+    // Mock token for development/testing
+    const mockToken = `mock_token_${Date.now()}`;
+    tokenCache.set(TOKEN_CACHE_KEY, mockToken, 3600);
+    return mockToken;
   }
-
-  // Base64 encode AppKey:AppSecret
-  const credentials = Buffer.from(`${appKey}:${appSecret}`).toString('base64');
 
   try {
     const response = await axios.post(
-      'https://api-apac.sigencloud.com/oauth/token',
-      { key: credentials },
+      'https://api-apac.sigencloud.com/openapi/auth/login/password',
+      { 
+        username: username,
+        password: password
+      },
       {
         headers: {
           'Content-Type': 'application/json',
@@ -36,14 +41,21 @@ export async function getAccessToken() {
       }
     );
 
-    const { access_token, expires_in } = response.data;
+    const data = response.data;
+    // Handle response structure - adjust based on actual API response
+    const accessToken = data.accessToken || data.data?.accessToken || data.token;
+    const expiresIn = data.expiresIn || data.data?.expiresIn || data.expires_in || 43200; // Default 12 hours
+    
+    if (!accessToken) {
+      throw new Error('No access token in response');
+    }
     
     // Cache token with TTL slightly less than expires_in
-    const cacheTTL = Math.max(expires_in - 300, 3600); // At least 1 hour
-    tokenCache.set(TOKEN_CACHE_KEY, access_token, cacheTTL);
+    const cacheTTL = Math.max(expiresIn - 300, 3600); // At least 1 hour
+    tokenCache.set(TOKEN_CACHE_KEY, accessToken, cacheTTL);
     
-    console.log('[Auth] New token acquired, expires in', expires_in, 'seconds');
-    return access_token;
+    console.log('[Auth] New token acquired, expires in', expiresIn, 'seconds');
+    return accessToken;
   } catch (error) {
     console.error('[Auth] Token request failed:', error.response?.data || error.message);
     throw error;

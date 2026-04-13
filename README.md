@@ -62,7 +62,7 @@ npm install
 
 # Copy environment file dan edit dengan kredensial Anda
 cp .env.example .env
-# Edit .env dengan SIGEN_APP_KEY dan SIGEN_APP_SECRET Anda
+# Edit .env dengan SIGEN_USERNAME dan SIGEN_PASSWORD Anda
 
 # Jalankan server
 npm run dev
@@ -91,11 +91,20 @@ Frontend akan berjalan di `http://localhost:3000`
 
 ### Backend (.env)
 ```env
-SIGEN_APP_KEY=your_app_key_here
-SIGEN_APP_SECRET=your_app_secret_here
+SIGEN_USERNAME=BBS@gatrianusantara.com
+SIGEN_PASSWORD=your_password_here
 PORT=4000
 NODE_ENV=development
 ```
+
+**Catatan:** API menggunakan endpoint username/password login:
+- **URL**: `POST https://api-apac.sigencloud.com/openapi/auth/login/password`
+- **Body**: `{ "username": "...", "password": "..." }`
+- **Response**: `{ "accessToken": "..." }`
+
+Untuk data retrieval:
+- **URL**: `GET https://api-apac.sigencloud.com/openapi/system`
+- **Headers**: `Authorization: Bearer <accessToken>`
 
 ### Frontend (.env.local)
 ```env
@@ -106,7 +115,7 @@ VITE_API_URL=http://localhost:4000/api
 ## 🧪 Testing Tanpa AppKey Asli
 
 Backend menyediakan **mock data fallback** otomatis jika:
-1. `SIGEN_APP_KEY` tidak dikonfigurasi
+1. `SIGEN_USERNAME` tidak dikonfigurasi
 2. Request ke Sigen API gagal
 
 Mock data akan menghasilkan:
@@ -114,7 +123,7 @@ Mock data akan menghasilkan:
 - Realtime energy flow random yang berubah setiap 5 detik
 - Historical data chart dengan data random
 
-**Tidak perlu credentials untuk testing!** Cukup jalankan tanpa set `SIGEN_APP_KEY`.
+**Tidak perlu credentials untuk testing!** Cukup jalankan tanpa set `SIGEN_USERNAME`.
 
 ## 📊 Fitur Utama
 
@@ -193,15 +202,16 @@ Runtime diakumulasi di backend dan ditampilkan dalam jam.
 
 ## 📝 Catatan Penting
 
-1. **Rate Limit**: API Sigen membatasi 1 request per 5 menit per akun/stasiun
-2. **Token Expiry**: OAuth token di-refresh otomatis sebelum expired (default 12 jam)
-3. **Generator Runtime**: Diinferensi, bukan dari API langsung
-4. **Mock Data**: Aktif otomatis jika tidak ada credentials atau API error
+1. **Authentication**: Menggunakan username/password login (bukan OAuth2 client credentials)
+2. **Rate Limit**: API Sigen membatasi 1 request per 5 menit per akun/stasiun
+3. **Token Expiry**: Access token di-refresh otomatis sebelum expired (default 12 jam)
+4. **Generator Runtime**: Diinferensi dari gridPower dan batterySoc, bukan dari API langsung
+5. **Mock Data**: Aktif otomatis jika tidak ada credentials atau API error
 
 ## 🔧 Troubleshooting
 
 ### Backend tidak bisa connect ke Sigen
-- Pastikan `SIGEN_APP_KEY` dan `SIGEN_APP_SECRET` benar
+- Pastikan `SIGEN_USERNAME` dan `SIGEN_PASSWORD` benar
 - Cek koneksi internet
 - Lihat log untuk error detail
 
