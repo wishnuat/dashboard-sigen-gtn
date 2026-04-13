@@ -5,31 +5,41 @@ node_modules/
 # Build artifacts
 dist/
 build/
+*.js.map
+*.css.map
 
-# Environment variables
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # Logs
 *.log
 
-# Temporary files
-*.tmp
-*.swp
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
-# IDE specific
-.vscode/
-.idea/
-
-# Python cache
+# Python (if applicable)
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# System files
-.DS_Store
-Thumbs.db
-
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
 ```

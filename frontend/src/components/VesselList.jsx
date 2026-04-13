@@ -1,91 +1,130 @@
-import React from 'react';
+import { useState } from 'react';
 
 /**
- * Vessel List Sidebar Component
- * Displays list of vessels/systems with status indicators
+ * Sidebar component untuk hierarchical vessel list
  */
-export function VesselList({ vessels, selectedSystem, onSelect }) {
-  if (!vessels || vessels.length === 0) {
-    return (
-      <div className="p-4 text-center text-gray-500">
-        No vessels available
-      </div>
-    );
-  }
+export default function VesselList({ vessels, selectedVessel, onSelectVessel }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedMenus, setExpandedMenus] = useState({
+    companyGroup: true,
+    subco1: true,
+    'subco1-tugboat': true,
+  });
 
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Vessels
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          {vessels.length} system{vessels.length !== 1 ? 's' : ''} connected
-        </p>
-      </div>
-      
-      <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-        {vessels.map((vessel) => (
-          <li key={vessel.id}>
-            <button
-              onClick={() => onSelect(vessel)}
-              className={`w-full p-4 text-left transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                selectedSystem?.id === vessel.id
-                  ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500'
-                  : 'border-l-4 border-transparent'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {vessel.name}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    ID: {vessel.id}
-                  </p>
-                </div>
-                
-                <StatusBadge status={vessel.status} />
-              </div>
-              
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="text-gray-600 dark:text-gray-400">
-                  <span className="font-medium">PV:</span> {vessel.pvCapacityFormatted || `${(vessel.pvCapacity / 1000).toFixed(1)} kW`}
-                </div>
-                <div className="text-gray-600 dark:text-gray-400">
-                  <span className="font-medium">Battery:</span> {vessel.batteryCapacityFormatted || `${(vessel.batteryCapacity / 1000).toFixed(1)} kWh`}
-                </div>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * Status Badge Component
- * Shows vessel/system status with color coding
- */
-function StatusBadge({ status }) {
-  const statusConfig = {
-    online: { color: 'bg-green-500', label: 'Online' },
-    offline: { color: 'bg-red-500', label: 'Offline' },
-    maintenance: { color: 'bg-yellow-500', label: 'Maintenance' },
-    warning: { color: 'bg-orange-500', label: 'Warning' },
+  const toggleMenu = (id) => {
+    setExpandedMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const config = statusConfig[status] || statusConfig.offline;
+  const filteredVessels = vessels.filter(v => 
+    !searchTerm || 
+    v.systemName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    v.systemId?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={`inline-block w-2 h-2 rounded-full ${config.color}`} />
-      <span className="text-xs text-gray-600 dark:text-gray-400 capitalize">
-        {config.label}
-      </span>
+    <div className="w-69 min-w-69 bg-[#161b27] border-r border-[#2a3045] flex flex-col overflow-y-auto">
+      {/* Search Box */}
+      <div className="p-3.5 border-b border-[#2a3045]">
+        <div className="flex items-center gap-2 bg-[#1e2535] border border-[#2a3045] rounded-lg px-2.5 py-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7a99" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input
+            placeholder="Search System Name or ID"
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="bg-none border-none outline-none text-xs text-[#9aaac8] w-full placeholder-[#4f6080]"
+          />
+        </div>
+      </div>
+
+      {/* Menu Container */}
+      <div className="flex-1 overflow-y-auto">
+        {filteredVessels.length === 0 ? (
+          <div className="p-4 text-center text-xs text-[#4f6080]">
+            No vessels available
+          </div>
+        ) : (
+          /* Company Group */
+          <div className="border-b border-[#1e2535]">
+            <div 
+              className={`px-3.5 py-3 cursor-pointer flex items-center justify-between hover:bg-[#1c2233] ${expandedMenus.companyGroup ? 'bg-[#1a2340]' : ''}`}
+              onClick={() => toggleMenu('companyGroup')}
+            >
+              <span className="text-xs font-semibold text-[#c8d8f0] uppercase tracking-wider">
+                Meranti Group
+              </span>
+              <svg 
+                className={`w-3.5 h-3.5 stroke-[#6b7a99] stroke-2 transition-transform ${expandedMenus.companyGroup ? 'rotate-90' : ''}`}
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor"
+              >
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </div>
+
+            {expandedMenus.companyGroup && (
+              <div className="bg-[#13171f]">
+                {/* Sub Company */}
+                <div className="px-3.5 py-2.5 cursor-pointer flex items-center justify-between hover:bg-[#1c2233] border-l-2 border-transparent pl-6">
+                  <span className="text-[10px] text-[#9aaac8] font-medium">
+                    PT. Samudera Empat Sekawan
+                  </span>
+                  <svg className="w-3.5 h-3.5 stroke-[#6b7a99] stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </div>
+
+                {/* Vessel Type */}
+                <div className="px-3.5 py-2.25 cursor-pointer flex items-center justify-between hover:bg-[#1c2233] border-l-2 border-transparent pl-9">
+                  <span className="text-[10px] text-[#8a9abf] font-medium">Tugboat</span>
+                  <svg className="w-3.5 h-3.5 stroke-[#6b7a99] stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </div>
+
+                {/* Vessel Cards */}
+                <div className="bg-[#0a0d12]">
+                  {filteredVessels.map((vessel) => (
+                    <div
+                      key={vessel.systemId}
+                      onClick={() => onSelectVessel(vessel)}
+                      className={`px-3.5 py-2.5 cursor-pointer border-b border-[#0f1117] transition-all border-l-2 pl-12 hover:bg-[#1c2233] ${
+                        selectedVessel?.systemId === vessel.systemId 
+                          ? 'bg-[#1a2340] border-l-[#3dd68c]' 
+                          : 'border-l-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-[#1e2a42] rounded-md inline-flex items-center justify-center flex-shrink-0">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f9eff" strokeWidth="1.5">
+                            <rect x="3" y="3" width="18" height="11" rx="2"/>
+                            <path d="M8 19h8m-4-5v5"/>
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium text-[#c8d8f0] truncate">
+                            {vessel.systemName}
+                          </div>
+                          <div className="text-[8px] text-[#4f6080] font-mono">
+                            {vessel.systemId}
+                          </div>
+                          <div className="text-[8px] text-[#6b8aaa]">
+                            {(vessel.pvCapacity || 0).toFixed(1)} kWp · {(vessel.batteryCapacity || 0).toFixed(2)} kWh
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-export default VesselList;
