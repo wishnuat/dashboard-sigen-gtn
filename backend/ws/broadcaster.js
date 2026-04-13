@@ -1,4 +1,4 @@
-import WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
 
 /**
  * WebSocket Broadcaster for Sigen Energy Dashboard
@@ -17,7 +17,7 @@ export class DataBroadcaster {
    * @param {import('http').Server} httpServer - HTTP server to attach to
    */
   init(httpServer) {
-    this.wss = new WebSocket.WebSocketServer({ 
+    this.wss = new WebSocketServer({ 
       server: httpServer,
       path: '/ws'
     });
@@ -69,11 +69,11 @@ export class DataBroadcaster {
 
   /**
    * Send data to specific client
-   * @param {WebSocket} ws - WebSocket client
+   * @param {import('ws').WebSocket} ws - WebSocket client
    * @param {object} data - Data to send
    */
   sendToClient(ws, data) {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws.readyState === 1) { // WebSocket.OPEN = 1
       ws.send(JSON.stringify(data));
     }
   }
@@ -87,7 +87,7 @@ export class DataBroadcaster {
     let sentCount = 0;
 
     this.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client.readyState === 1) { // WebSocket.OPEN = 1
         client.send(message);
         sentCount++;
       }
